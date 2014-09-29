@@ -1,0 +1,134 @@
+\documentclass[a4paper,10pt]{article}
+%\documentclass[a4paper,10pt]{scrartcl}
+
+\usepackage[utf8]{inputenc}
+
+% ------
+% Clickable URLs
+\usepackage{hyperref}
+
+\title{PhoneX component list \\ (confidential, subject to NDA)}
+\author{Du\v{s}an Klinec}
+% \date{23.9.2014}
+
+\pdfinfo{%
+  /Title    (PhoneX component list [CONFIDENTIAL])
+  /Author   (Du\v{s}an Klinec)
+  /Creator  (Du\v{s}an Klinec)
+  /Producer ()
+  /Subject  ()
+  /Keywords ()
+}
+
+\begin{document}
+\maketitle
+
+\section{PhoneX client application}
+Here follows the list of client application components / third party libraries used in PhoneX Android application.
+
+\subsection{PJSIP}\label{sec:pjsip}
+\par\smallskip\noindent\textbf{Purpose.} Library used for secure SIP calls in conjunction with ZRTPCPP library (see section \ref{sec:zrtpcpp}). 
+Used to establish a direct communication link with a remote party using STUN/TURN/ICE protocols.
+
+\par\smallskip\noindent\textbf{License.} Authors provide dual licensing model. One option is GPL which is undesired for our purpose 
+since it requires the whole application to be released under GPL license what implies publishing a source code. 
+Another one is a commercial license. Commercial license is royalty free, company based, yearly based.
+Intuitively, after buying a license for one year (\pounds 7500 + VAT), the library can be used in unlimited number 
+of products (i.e., Android, iOS, desktop versions) for commercial purposes without need to publish a source code, 
+no matter how many developers are in the company or how many users is using the application. Detailed license agreement 
+is attached in a document package as \verb|PJSIPSoftwareLicenseAgreement1.7.pdf|. GPL license: \\ \url{https://www.gnu.org/licenses/gpl-2.0.html}
+\par\smallskip\noindent\textbf{More information.} Written in C/C++. Compatible with Android, iOS, Linux, Windows, MAC OS X. \url{http://www.pjsip.org/}
+
+\subsection{aSMACK}
+\par\smallskip\noindent\textbf{Purpose.} Library used for XMPP communication with server side. Currently used for presence and push 
+notifications between users and servers. Later messages are planned to be implemented using XMPP protocol.
+\par\smallskip\noindent\textbf{License.} Released under Apache License v2 (permissive license, no source code publishing) + OpenLDAP license (permissive license).
+Licensing information: \url{https://github.com/Flowdalic/asmack/blob/master/LICENSE}
+\par\smallskip\noindent\textbf{More information.} \url{http://www.igniterealtime.org/projects/smack/}
+
+\subsection{kSOAP}
+\par\smallskip\noindent\textbf{Purpose.} Library used for SOAP communication with server components. Mainly used in login process and certificate exchange.
+\par\smallskip\noindent\textbf{License.} Released under permissive open source license, BSD. \\ \url{https://github.com/mosabua/ksoap2-android/blob/master/LICENSE.txt}
+\par\smallskip\noindent\textbf{More information.}  \url{http://kobjects.org/ksoap2/index.html}
+
+\subsection{ZRTPCPP}\label{sec:zrtpcpp}
+\par\smallskip\noindent\textbf{Purpose.} Used in conjunction with PJSIP library, implements ZRTP protocol for establishing unique cryptographic keys 
+for each SIP voice call.
+\par\smallskip\noindent\textbf{License.} Released under LGPL. License allows usage in closed source project under some circumstances. Intuitively, if a LGPL
+licensed library is dynamically linked to the closed source application, LGPL is not violated. This use case is permitted and widely used. In PhoneX
+we use ZRTPCPP library in this way, i.e., it is dynamically linked to the PJSIP library. LGPL also states that all modifications made to the LGPL licensed 
+library have to be published - this is not restrictive for us. LGPL: \url{https://www.gnu.org/licenses/lgpl.html}
+\par\smallskip\noindent\textbf{More information.} Written in C/C++. \\ \url{https://github.com/wernerd/ZRTPCPP}
+
+\subsection{webRTC}
+\par\smallskip\noindent\textbf{Purpose.} Library used for audio/video processing.
+\par\smallskip\noindent\textbf{License.} Released under permissive open source license, BSD. \\ \url{http://www.webrtc.org/license-rights/license}.
+\par\smallskip\noindent\textbf{More information.}  \url{http://www.webrtc.org/}
+
+\subsection{Speex codec}
+\par\smallskip\noindent\textbf{Purpose.} Main audio codec used for voice encoding.
+\par\smallskip\noindent\textbf{License.} Released under permissive open source license, BSD. \\ \url{https://www.xiph.org/licenses/bsd/speex/}.
+\par\smallskip\noindent\textbf{More information.}  \url{http://www.speex.org/}
+
+\subsection{Spongy castle}
+\par\smallskip\noindent\textbf{Purpose.} Main cryptographic library used for e.g., generating cryptographic keys, certificates, secure certificate storage, 
+symmetric and asymmetric encryption. It is an Android port of a BouncyCastle library.
+\par\smallskip\noindent\textbf{License.} Released under same permissive open source license as BouncyCastle, addaptation of MIT X11 license. \\ \url{http://www.bouncycastle.org/licence.html}.
+\par\smallskip\noindent\textbf{More information.}  SpongyCastle: \url{https://rtyley.github.io/spongycastle/} \quad BouncyCastle: \url{http://www.bouncycastle.org/}
+
+\subsection{SQLCipher}
+\par\smallskip\noindent\textbf{Purpose.} Library used for an encrypted storage for PhoneX. We store user profile data, messages and other sensitive information 
+to an encrypted SQLCipher database. It provides a transparent encryption layer for SQLite database.
+\par\smallskip\noindent\textbf{License.} Released under permissive open source license, BSD. \\ \url{https://www.zetetic.net/sqlcipher/license}.
+\par\smallskip\noindent\textbf{More information.}  \url{https://www.zetetic.net/sqlcipher}
+
+
+\section{PhoneX server side}
+Here follows the list of client application components / third party software used on the server side of PhoneX application.
+
+\subsection{MySQL}
+\par\smallskip\noindent\textbf{Purpose.} Current database layer used by server side software. 
+\par\smallskip\noindent\textbf{License.} Released under GPL license. Poses no restrictions for PhoneX.
+Used as provided by standard distribution channels.
+\par\smallskip\noindent\textbf{More information.} \url{https://www.mysql.com/}
+
+\subsection{OpenSIPS}
+\par\smallskip\noindent\textbf{Purpose.} SIP server used for establishing secure SIP calls. This software is widely deployed in VoIP architectures 
+and well tested by community. Has good properties in terms of performance and throughput. It is scalable, capable of using memory caching (memcache).
+Works also well in failover/load balancing scenario, a lot of materials available online. 
+
+\par\smallskip\noindent\textbf{License.} Released under GPL license. We made no modifications to the SIP server so this poses no restriction for PhoneX.
+We are using it as provided by standard distribution channels.
+\par\smallskip\noindent\textbf{More information.} Written in C. \url{http://www.opensips.org/}
+
+\subsection{Openfire}
+\par\smallskip\noindent\textbf{Purpose.} XMPP server. Used mainly for user presence and push notifications. 
+This software is one of the most common XMPP servers used. Implements a lot of XMPP extensions and provides a good scalability (clustering support).
+
+\par\smallskip\noindent\textbf{License.} Released under permissive open source Apache License v2.
+\par\smallskip\noindent\textbf{More information.}  Written in Java, uses embedded Java Tomcat servlet container. \url{http://www.igniterealtime.org/projects/openfire/}
+
+\subsection{Restund}
+\par\smallskip\noindent\textbf{Purpose.} Lightweight relay server. Implements TURN/STUN protocol. Relays RTP (audio/video stream) between two 
+communicating parties if no direct connection is available.
+
+\par\smallskip\noindent\textbf{License.} Released under permissive open source BSD license.
+\par\smallskip\noindent\textbf{More information.}  Written in C. \url{http://www.creytiv.com/restund.html}
+
+\subsection{Certificate server}
+\par\smallskip\noindent\textbf{Purpose.} Server used for login, certificate generation / exchange, contact list storage. 
+Provides SOAP interface to the PhoneX client.
+\par\smallskip\noindent\textbf{License.} Programmed by us for PhoneX.
+\par\smallskip\noindent\textbf{More information.}  Written in Java. Runs in Tomcat servlet container. Uses Spring, Hibernate.
+
+\subsection{FileTransfer server}
+\par\smallskip\noindent\textbf{Purpose.} Server used for file transfer. Implements our file transfer protocol. 
+\par\smallskip\noindent\textbf{License.} Programmed by us for PhoneX.
+\par\smallskip\noindent\textbf{More information.}  Written in Java. Runs in Tomcat servlet container. Uses Spring, Hibernate.
+
+\section{Licensing \& cost summary}
+PhoneX uses open source software with licenses compatible with commercial application model. Expenses for the whole project 
+are only \pounds 7500 + VAT a year for PJSIP commercial license, (see section \ref{sec:pjsip}). PJSIP is compatible with
+all target platforms thus no further SIP library is needed.
+
+\end{document}
