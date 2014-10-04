@@ -1,0 +1,285 @@
+\documentclass[a4paper,10pt]{article}
+%\documentclass[a4paper,10pt]{scrartcl}
+
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage[letterpaper, margin=1in, left=0.7in]{geometry}
+\usepackage{fancyvrb}
+
+% ------
+% Clickable URLs
+\usepackage{hyperref}
+
+\title{PhoneX messaging protocol draft \\ (confidential, subject to NDA)}
+\author{Du\v{s}an Klinec, Miroslav Sv\'{i}tok}
+% \date{23.9.2014}
+
+\pdfinfo{%
+  /Title    (PhoneX component list [CONFIDENTIAL])
+  /Author   (Du\v{s}an Klinec, Miroslav Sv\'{i}tok)
+  /Creator  (Du\v{s}an Klinec, Miroslav Sv\'{i}tok)
+  /Producer ()
+  /Subject  ()
+  /Keywords ()
+}
+
+\begin{document}
+\maketitle
+
+\section{Message protocol v1 - S/MIME}
+Message protocol v1 uses S/MIME message format. 
+Plaintex message format entering the encryption is: 
+
+\begin{center}
+  \verb#s1 = ||1||source-sip||date-of-creation||nonce||text-to-send# 
+\end{center}
+\begin{itemize}
+ \item \verb#1# is the version of the protocol.
+ \item \verb#source-sip# denotes creator of the message.
+ \item \verb#date-of-creation# denotes date when message was created, i.e., it is a number of milliseconds since Jan. 1, 1970, midnight GMT.
+ \item \verb#nonce# is a random integer. Supposed to serve as a protection against a replay attack. Moreover, it helps to detect 
+ duplicate messages due to lost ACK packets.
+ \item \verb#text-to-send# is a plaintext message entered by user in the application interface.
+\end{itemize}
+
+\subsection{Message build algorithm}
+\begin{enumerate}
+ \item A compression of the $s1$ message to reduce a message size.\\
+ \verb#s2 = compress(s1)#
+ 
+ \item Compressed message is signed with the private key of the sender. Scheme used is \verb#SHA1withRSA#. 
+ Sender certificate is added to the message so recipient is able to verify the signature. This step is required. Disadvantege is 
+ that extra certificate increases size of the sent message.\\
+ \verb#s3 = sign(s2, SHA1withRSA)#
+ 
+ \item Signed message is then encrypted with \verb#AES128-CBC#, using an unique symmetric key encrypted with the recipient's public key.\\
+ \verb#s4 = encrypt(s3, RSA, AES128-CBC)#
+ 
+ \item Message is base64 encoded because SIP messaging protocol supports only text messages to be transmitted.\\
+ \verb#s5 = base64_encode(s4)#
+ 
+\end{enumerate}
+
+
+\section{Message protocol v2 - based on protocol buffers}
+Design of the next messaging protocol was inspired by problems encountered with messaging protocol v1. 
+Namely it should solve the following issues:
+
+\begin{itemize}
+ \item Allow for a better and modular implementation. Aim for forward compatibility to support future protocol extensions.
+ Both secure transport protocol and message protocol can have different versions and separate dispatchers in the implementation
+ handling the protocol type.
+ \item Message protocol: Add support for a different type of messages, e.g., command messages, push notification messages, ACK messages. Each
+ can have a different message format and a different dispatcher handling them.
+ \item Reduce the message size: adding a certificate should be an optional step especially in the interactive communication. Attaching a 
+ certificate is ineffective in interactive communication. Simple message takes 1kB of data (base64 encoded). Sending such a big message
+ with the mobile internet connection proved to be non-reliable due to high packet loss / transmission errors. 
+ \item Reduce the message code handling footprint. Currently, {\it BouncyCastle S/MIME} library is used for handling the message 
+ processing, i.e., encryption, decryption, signatures, etc... It has non-trivial code footprint and complexity. S/MIME protocol
+ might be too complicated for some purposes (i.e., signaling messages) and cannot be used as a general purpose secure transport protocol.
+\end{itemize}
+
+\subsection{Message protocol ideas}
+\begin{itemize}
+ \item The core idea is to clearly separate a {\it secure transport protocol (STP)}, responsible for a secure authenticated message transport to the destination
+and a {\it application message protocol (AMP) }, responsible for IM, signaling, etc... The design is inspired by ISO/OSI encapsulation/port multiplexing.
+
+ \item Both STP and AMP contains version number (like IP), in order to support future extensions.
+
+ \item STP can provide different security properties. For example signed STPs provides non-repudiation while STPs featuring deniable authentication
+provide privacy.
+
+ \item STP is level 1 protocol, AMP is level 2 protocol (AMP is encapsulated in / carried by STP).
+ 
+ \item One of the STP can be S/MIME protocol.  
+ 
+ \item Whole message protocol should be independent on the transport protocol used to deliver messages to the endpoints. It can be
+ a text-only transport protocol, such as SIP SIMPLE or XMPP message, thus the whole message can be base64 encoded before sending.
+\end{itemize}
+
+\subsection{Message protocol design}
+\begin{Verbatim}[frame=single]
+message MessageProtocolEnvelope {
+  optional int protocolType=1;
+  optional int protocolVersion=2;
+  optional int sequenceNumber=3;
+  optional bytes payload=4;
+}
+\end{Verbatim} 
+
+Payload field contains particular STP. Mapping of the \verb#protocolType# number to the particular STP:\\
+\begin{Verbatim}[frame=single]
+1 = S/MIME, protocol v1.
+2 = Lightweight STP. 
+\end{Verbatim} 
+
+\subsection{STPSimple, v1}
+Lightweight STP, using hybrid encryption, digital signature. Protocol does not provide PFC (perfect forward secrecy).
+
+Application message passed from upper layer (AMP) is denoted as \verb#messagePayload#. 
+\begin{Verbatim}[frame=single]
+message STPSimple {
+  // Application message protocol type (e.g., IM, push, ...)
+  // The message is routed to the upper layer dispatcher depending on this number.
+  optional int ampType=1;
+  
+  // AMP version number. Supports extensions.
+  optional int ampVersion=2;
+  
+  // OPT. Application message sequence number. For ACK purposes, message addressing.
+  optional uint32 sequenceNumber=4;
+  
+  // Timestamp of the message. Replay attack, timestamping.
+  optional uint64 messageSentUTC=3;
+  
+  // Random integer for the message. Replay attack.
+  optional uint32 randomNonce=4;
+  
+  // Sender address identification.
+  optional string sender=5;
+  
+  // Message destination.
+  optional string destination=6;
+  
+  // OPT. Message destination type (address/hash(nonce:address))
+  optional int destinationType=7;
+  
+  // Digital signature of the message.
+  optional bytes signature=8;
+  // OPT.
+  optional int signatureVersion=9;
+  
+  // OPT. Certificate version used for the signature.
+  optional string certificateVersion=10;
+  
+  // RSA encrypted block. RSA/ECB/OAEPWithSHA1AndMGF1Padding
+  optional bytes easymBlock=11;
+  // OPT.
+  optional int easymBlockVersion=12;
+  
+  // Symmetric block, IV, SALT, ciphertext
+  optional bytes esymBlock=13;
+  // OPT.
+  optional int esymBlockVersion=14;
+  
+  // HMAC on the message fields
+  optional bytes hmac=15;
+  // OPT.
+  optional int hmacVersion=16;
+}
+\end{Verbatim} 
+
+\paragraph{Fields discussion.}
+\begin{itemize}
+ \item \verb#Sequence# number is optional. Intended purpose is to be able to ACKnowledge some messages or answer on some messages.
+ \item \verb#randomNonce# is required as an replay attack protection.
+ \item \verb#destination# address i.e., the recipient address can be either plaintext, or hashed. By default, \verb#destinationType# can be omitted.
+ Default is plaintext recipient address. 
+ 
+ Intended purpose is to hide application
+ message destination (can differ from underlying protocol pseudonym) from server or other recipients. Intended recipient can easily verify 
+ if the message is addressed for him, others has to perform costly computation. But it is not encryption, attacker still can test the destination.
+
+ \item \verb#signatureVersion# contains signature scheme used for the digital signature. This field can be omitted, default is RSA signature.
+ 
+ \item \verb#signature# is a RSA digital signature protects key message fields and the plaintext message. Signing plaintext 
+ is intended to bind plaintext message to the sender identity. Signature binds following fields together:
+\begin{itemize}
+ \item \verb#protocolType#
+ \item \verb#protocolVersion#
+ \item \verb#ampType#
+ \item \verb#ampVersion#
+ \item \verb#sequenceNumber#
+ \item \verb#randomNonce#
+ \item \verb#sender#
+ \item \verb#destination#
+ \item \verb#destinationType#
+ \item \verb#iv#, a initialization vector for the symmetric encryption.
+ \item \verb#encKey01#, a symmetric encryption key for the symmetric encryption block.
+ \item \verb#macKey01#, a HMAC symmetric key.
+ \item \verb#messagePayload#
+\end{itemize}
+
+$
+sig = SIGN_{privKey}(hash(protocolType:protocolVersion:ampType:ampVersion:sequenceNumber:randomNonce:sender:
+destination:destinationType:iv:encKey01:macKey01:messagePayload)) 
+$
+
+\item \verb#easymBlockVersion# contains asymmetric encryption scheme version, field can be omitted, default is \\\verb#RSA/ECB/OAEPWithSHA1AndMGF1Padding#.
+\item \verb#easymBlock# contains asymmetrically encrypted symmetric keys. Asymmetric block size depends on the key size, but should be 2048 bits
+at least if using RSA encryption, thus several encryption keys fits this block.\\
+$easymBlock = AENCRYPT(encKey01:macKey01)$
+
+\item \verb#esymBlockVersion# contains symmetric encryption scheme version, field can be omitted, default is \\\verb#AES/GCM/NoPadding#, 256-bit key.
+AES Galois Counter Mode is a preferred way of encryption. 
+It is authenticated encryption (simultaneously encrypts and authenticates the plaintext data). In GCM mode, no padding is used (not a bug).
+
+\item \verb#esymBlock# contains symmetrically encrypted \verb#messagePayload#. Initialization vector is concatenated with the ciphertext.\\
+$esymBlock = IV || ENCRYPT(iv, encKey01, messagePayload)$
+
+\item \verb#hmacVersion# contains hmac scheme used, field can be omitted, default is \verb#HmacSHA1#.
+
+\item \verb#hmac# HMAC on the message fields. Protects same fields as signature + signature field, 
+asymmetric encryption block and symmetric encryption block. Signature protects plaintext version of the message 
+while HMAC protects whole message (ciphertext version). Helps to avoid chosen ciphertext attack. 
+HMAC is easy to generate \& verify, has a small footprint while added security benefit is non-trivial.
+Signature protects plaintext version of the message.
+
+Note that it is a symmetric technique so attacker can still create packets with valid HMAC. Digital signature 
+has to be verified (mac key is signed as well).
+
+\begin{itemize}
+ \item \verb#protocolType#
+ \item \verb#protocolVersion#
+ \item \verb#ampType#
+ \item \verb#ampVersion#
+ \item \verb#sequenceNumber#
+ \item \verb#randomNonce#
+ \item \verb#sender#
+ \item \verb#destination#
+ \item \verb#destinationType#
+ \item \verb#iv#, initialization vector for symmetric encryption.
+ \item \verb#encKey01#, symmetric encryption key for the symmetric encryption block.
+ \item \verb#macKey01#, hmac symmetric key.
+ \item \verb#easymBlock#
+ \item \verb#easymBlockVersion#
+ \item \verb#esymBlock#
+ \item \verb#esymBlockVersion#
+\end{itemize}
+  
+$
+hmac = HMAC(macKey01, protocolType:protocolVersion:ampType:ampVersion:sequenceNumber:randomNonce:sender:
+destination:destinationType:iv:encKey01:macKey01:easymBlock:easymBlockVersion:esymBlock:esymBlockVersion)) 
+$
+\end{itemize}
+
+\subsection{STPSimpleGroup}
+This section proposes an extension for the STPSimple protocol for group messaging.
+Idea: instead of flat key structure, concept of \emph{keyslots} is proposed.
+
+The AMP payload is encrypted with master symmetric encryption key, MK.
+For each recipient the STP message contains one key slot. Each key slot encrypts MK with 
+public key of the recipient. 
+
+Benefit: single message can be sent to multiple recipients (e.g., by the server) without modification. Some
+broadcasting feature of the underlying transport protocol can be used to optimize group messages in bandwidth constrained environments.
+
+It can be used for group messaging or for one user account enabled on different user devices (multiple instances),
+for each instance, a different key/certificate is used. Assumption: instances are distinguishable from
+each other by some ID/pseudonym, as in XMPP case.
+
+This is proposed as a separate protocol in order to simplify protocol design and use of the protocol.
+In many cases the simple version suffices.
+
+\subsection{AMPIMSimple, v1}
+This section briefly describes application message protocol for instant messaging. This messaging protocol is very simple,
+it contains just one field with text message from the user.
+
+\begin{Verbatim}[frame=single]
+message STPSimple {
+  // Message sent by user.
+  optional string message=1;
+}
+\end{Verbatim} 
+
+\end{document}
