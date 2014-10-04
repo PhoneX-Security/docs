@@ -83,15 +83,18 @@ Namely it should solve the following issues:
 \begin{itemize}
  \item The core idea is to clearly separate a {\it secure transport protocol (STP)}, responsible for a secure authenticated message transport to the destination
 and a {\it application message protocol (AMP) }, responsible for IM, signaling, etc... The design is inspired by ISO/OSI encapsulation/port multiplexing.
+The idea is to have multiple simpler protocols rather than one big, complex and full-fledged protocol.
 
- \item Both STP and AMP contains version number (like IP), in order to support future extensions.
+ \item Both STP and AMP contains version number (like IP), in order to support future protocol extensions.
 
- \item STP can provide different security properties. For example signed STPs provides non-repudiation while STPs featuring deniable authentication
-provide privacy.
+ \item There may be several distinct STPs defined, each providing different security properties. 
+ For example signed STPs provides non-repudiation while STPs featuring deniable authentication
+provide privacy. There may be a plain STP providing only authentication, or using only simple symmetric encryption 
+using shared secret keys. Plain STP may be used e.g., for ACK messages.
 
  \item STP is level 1 protocol, AMP is level 2 protocol (AMP is encapsulated in / carried by STP).
  
- \item One of the STP can be S/MIME protocol.  
+ \item One of the STP can be S/MIME protocol, already used as v1 message protocol.  
  
  \item Whole message protocol should be independent on the transport protocol used to deliver messages to the endpoints. It can be
  a text-only transport protocol, such as SIP SIMPLE or XMPP message, thus the whole message can be base64 encoded before sending.
@@ -102,7 +105,7 @@ provide privacy.
 message MessageProtocolEnvelope {
   optional int protocolType=1;
   optional int protocolVersion=2;
-  optional int sequenceNumber=3;
+  optional int sequenceNumber=3; // Optional.
   optional bytes payload=4;
 }
 \end{Verbatim} 
@@ -110,7 +113,12 @@ message MessageProtocolEnvelope {
 Payload field contains particular STP. Mapping of the \verb#protocolType# number to the particular STP:\\
 \begin{Verbatim}[frame=single]
 1 = S/MIME, protocol v1.
-2 = Lightweight STP. 
+2 = Lightweight STP.
+3 = Group STP.
+4 = FileTransfer protocol.
+5 = OTR protocol.
+6 = Shared secret key protocol.
+7 = Plain protocol.
 \end{Verbatim} 
 
 \subsection{STPSimple, v1}
@@ -253,6 +261,13 @@ destination:destinationType:iv:encKey01:macKey01:easymBlock:easymBlockVersion:es
 $
 \end{itemize}
 
+\paragraph{Version number discussion.} There are several ways how to encapsulate two different protocols.
+Internet Protocol (IP) has version defined inside, while type of the protocol is defined in an underlying layer.
+We decided to add version number to the underlying layer so there are no further requirements on the upper message format.
+E.g., parser does not have to assume that the message is still ProtocolBuffers encoded with version number as a first field
+in the message, so the different version of the protocol message can change its format significantly. Note that
+this affects only a message dispatcher handling particular message type.
+
 \subsection{STPSimpleGroup}
 This section proposes an extension for the STPSimple protocol for group messaging.
 Idea: instead of flat key structure, concept of \emph{keyslots} is proposed.
@@ -270,6 +285,27 @@ each other by some ID/pseudonym, as in XMPP case.
 
 This is proposed as a separate protocol in order to simplify protocol design and use of the protocol.
 In many cases the simple version suffices.
+
+\subsection{Further variants of STPs}
+There may be different multiple STPs suitable for different purposes.
+\begin{itemize}
+ \item FileTransfer protocol. We may use our FT protocol already employed in the PhoneX architecture. It provides Perfect Forward Secrecy
+ and has good anti-SPAM properties. 
+ 
+ \item OTR\footnote{\url{https://otr.cypherpunks.ca/Protocol-v3-4.0.0.html}} protocol. It provides Perfect Forward Secrecy and is 
+ de-facto standard for a secure communication in instant messages. Benefit is that the protocol is well-tested by community
+ and provides \emph{deniable encryption}. Disadvantage is that initial authenticated key exchange takes 2 round trips what can be 
+ problematic in some network limited setups. \\
+ Proposed trade-off: Perform re-keying / authenticated key exchange once per time window (e.g., once a week), when both clients 
+ are connected to WiFi or other wide bandwidth network. 
+ 
+ \item Symmetric encryption / authentication protocol. When using OTR, both sides posses shared secret symmetric keys that can be used
+ for symmetric encryption and HMAC. This message has smaller footprint since digital signature and asymmetric encryption blocks
+ are not used. Moreover, it is computationally effective and does not provide non-repudiation, which is sometimes undesirable.
+ 
+ \item Plain STP. For some message types (ACKs), encryption is not necessary.
+\end{itemize}
+
 
 \subsection{AMPIMSimple, v1}
 This section briefly describes application message protocol for instant messaging. This messaging protocol is very simple,
