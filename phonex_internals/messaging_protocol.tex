@@ -129,51 +129,63 @@ Application message passed from upper layer (AMP) is denoted as \verb#messagePay
 message STPSimple {
   // Application message protocol type (e.g., IM, push, ...)
   // The message is routed to the upper layer dispatcher depending on this number.
-  optional int ampType=1;
+  optional int32 ampType=1;
   
   // AMP version number. Supports extensions.
-  optional int ampVersion=2;
+  optional int32 ampVersion=2;
   
   // OPT. Application message sequence number. For ACK purposes, message addressing.
-  optional uint32 sequenceNumber=4;
+  optional uint32 sequenceNumber=3;
   
   // Timestamp of the message. Replay attack, timestamping.
-  optional uint64 messageSentUTC=3;
+  optional uint64 messageSentMilliUTC=4;
   
   // Random integer for the message. Replay attack.
-  optional uint32 randomNonce=4;
+  optional uint32 randomNonce=5;
   
   // Sender address identification.
-  optional string sender=5;
+  optional string sender=6;
   
   // Message destination.
-  optional string destination=6;
+  optional string destination=7;
   
   // OPT. Message destination type (address/hash(nonce:address))
-  optional int destinationType=7;
+  optional int32 destinationType=8;
   
   // Digital signature of the message.
-  optional bytes signature=8;
+  optional bytes signature=9;
   // OPT.
-  optional int signatureVersion=9;
+  optional int32 signatureVersion=10;
   
   // OPT. Certificate version used for the signature.
-  optional string certificateVersion=10;
+  optional string certificateVersion=11;
+  
+  // Initialization vector for symmetric encryption.
+  optional bytes iv=12;
   
   // RSA encrypted block. RSA/ECB/OAEPWithSHA1AndMGF1Padding
-  optional bytes easymBlock=11;
+  optional bytes easymBlock=13;
   // OPT.
-  optional int easymBlockVersion=12;
+  optional int easymBlockVersion=14;
   
-  // Symmetric block, IV, SALT, ciphertext
-  optional bytes esymBlock=13;
+  // Symmetric block, ciphertext
+  optional bytes esymBlock=15;
   // OPT.
-  optional int esymBlockVersion=14;
+  optional int esymBlockVersion=16;
   
   // HMAC on the message fields
-  optional bytes hmac=15;
+  optional bytes hmac=17;
   // OPT.
-  optional int hmacVersion=16;
+  optional int hmacVersion=18;
+  
+  // Helper fields, used only for signature & HMAC.
+  optional bytes encKey=19;
+  optional bytes macKey=20;
+  optional bytes payload=21;
+  
+  // Helper fields, used only for MAC computation. 
+  optional int32 protocolType=22;
+  optional int32 protocolVersion=23;
 }
 \end{Verbatim} 
 
@@ -212,6 +224,9 @@ $
 sig = SIGN_{privKey}(hash(protocolType:protocolVersion:ampType:ampVersion:sequenceNumber:randomNonce:sender:
 destination:destinationType:iv:encKey01:macKey01:messagePayload)) 
 $
+
+\item \verb#iv# is an initialization vector for a symmetric encryption. If the encryption algorithm does not require IV (e.g., ECB. Note: do not use ECB!)
+this field is omitted.
 
 \item \verb#easymBlockVersion# contains asymmetric encryption scheme version, field can be omitted, default is \\\verb#RSA/ECB/OAEPWithSHA1AndMGF1Padding#.
 \item \verb#easymBlock# contains asymmetrically encrypted symmetric keys. Asymmetric block size depends on the key size, but should be 2048 bits
@@ -259,7 +274,23 @@ $
 hmac = HMAC(macKey01, protocolType:protocolVersion:ampType:ampVersion:sequenceNumber:randomNonce:sender:
 destination:destinationType:iv:encKey01:macKey01:easymBlock:easymBlockVersion:esymBlock:esymBlockVersion)) 
 $
+
+\item \verb#encKey# [VIRTUAL] is symmetric encryption key extracted from asymmetric encryption block. 
+
+\item \verb#macKey# [VIRTUAL] is symmetric HMAC key extracted from asymmetric encryption block. 
+ 
+\item \verb#payload# [VIRTUAL] is decrypted symmetric block.
+
+\item \verb#protocolType# [VIRTUAL] is protocol type - taken from lower protocol. It is a type of this protocol.
+
+\item \verb#protocolVersion# [VIRTUAL] is protocol version - taken from lower protocol. It is a type of this protocol.
+
 \end{itemize}
+
+\paragraph{Virtual message fields.} Fields marked as \verb#[VIRTUAL]# are helper fields used only in offline phase, 
+during message creation or message decryption. It helps to generate/verify a digital signature and HMAC on additional fields in a following way: these 
+fields are filled in, signature and/or HMAC is generated/verified, virtual fields are erased and signature and HMAC is added to the message.
+Virtual messages must not be filled in during message transfer. 
 
 \paragraph{Version number discussion.} There are several ways how to encapsulate two different protocols.
 Internet Protocol (IP) has version defined inside, while type of the protocol is defined in an underlying layer.
@@ -309,13 +340,16 @@ There may be different multiple STPs suitable for different purposes.
 
 \subsection{AMPIMSimple, v1}
 This section briefly describes application message protocol for instant messaging. This messaging protocol is very simple,
-it contains just one field with text message from the user.
+it contains just one field with text message from the user. 
 
 \begin{Verbatim}[frame=single]
 message STPSimple {
-  // Message sent by user.
-  optional string message=1;
+  // Message sent by user. message=GZIP(plainMessage);
+  optional bytes message=1;
 }
 \end{Verbatim} 
+
+Field message contains a GZIPed version of a plaintext message entered by user in UI. GZIP compression reduces 
+overall message size.
 
 \end{document}
