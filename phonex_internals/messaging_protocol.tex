@@ -62,6 +62,7 @@ Plaintex message format entering the encryption is:
 
 
 \section{Message protocol v2 - based on protocol buffers}
+
 Design of the next messaging protocol was inspired by problems encountered with messaging protocol v1. 
 Namely it should solve the following issues:
 
@@ -101,6 +102,7 @@ using shared secret keys. Plain STP may be used e.g., for ACK messages.
 \end{itemize}
 
 \subsection{Message protocol design}
+\label{subsec:message_protocol_design}
 \begin{Verbatim}[frame=single]
 message MessageProtocolEnvelope {
   optional int protocolType=1;
@@ -110,18 +112,20 @@ message MessageProtocolEnvelope {
 }
 \end{Verbatim} 
 
-Payload field contains particular STP. Mapping of the \verb#protocolType# number to the particular STP:\\
+Payload field contains particular transport protocol. Mapping of the \verb#protocolType# number to the particular type:\\
 \begin{Verbatim}[frame=single]
 1 = S/MIME, protocol v1.
-2 = Lightweight STP.
+2 = STPSimple.
 3 = Group STP.
-4 = FileTransfer protocol.
-5 = OTR protocol.
-6 = Shared secret key protocol.
-7 = Plain protocol.
+4 = STPSimpleAuth. 
+4 = Group STPAuth.
+// 4 = FileTransfer protocol.
+// 5 = OTR protocol.
+// 6 = Shared secret key protocol.
+// 7 = Plain protocol.
 \end{Verbatim} 
 
-\subsection{STPSimple, v1}
+\subsection{STPSimple v1, v2}
 Lightweight STP, using hybrid encryption, digital signature. Protocol does not provide PFC (perfect forward secrecy).
 
 Application message passed from upper layer (AMP) is denoted as \verb#messagePayload#. 
@@ -138,7 +142,7 @@ message STPSimple {
   optional uint32 sequenceNumber=3;
   
   // Timestamp of the message. Replay attack, timestamping.
-  optional uint64 messageSentMilliUTC=4;
+  optional uint64 messageSentMiliUTC=4;
   
   // Random integer for the message. Replay attack.
   optional uint32 randomNonce=5;
@@ -225,6 +229,8 @@ sig = SIGN_{privKey}(hash(protocolType:protocolVersion:ampType:ampVersion:sequen
 destination:destinationType:iv:encKey01:macKey01:messagePayload)) 
 $
 
+\textbf{Update v2}: signature now includes \verb#messageSentMiliUTC#;
+
 \item \verb#iv# is an initialization vector for a symmetric encryption. If the encryption algorithm does not require IV (e.g., ECB. Note: do not use ECB!)
 this field is omitted.
 
@@ -275,6 +281,8 @@ hmac = HMAC(macKey01, protocolType:protocolVersion:ampType:ampVersion:sequenceNu
 destination:destinationType:iv:encKey01:macKey01:easymBlock:easymBlockVersion:esymBlock:esymBlockVersion)) 
 $
 
+\textbf{Update v2}: hmac now includes \verb#messageSentMiliUTC#;
+
 \item \verb#encKey# [VIRTUAL] is symmetric encryption key extracted from asymmetric encryption block. 
 
 \item \verb#macKey# [VIRTUAL] is symmetric HMAC key extracted from asymmetric encryption block. 
@@ -317,6 +325,55 @@ each other by some ID/pseudonym, as in XMPP case.
 This is proposed as a separate protocol in order to simplify protocol design and use of the protocol.
 In many cases the simple version suffices.
 
+\subsection{STPSimple Authenticated (v1.0)}
+STPSimpleAuth is a variant of STPSimple that does perform encryption, only authentication of transported payload. It may be useful for some message types (ACKs).
+Both protocols can share the same underlying protobuf structure (as STPSimpleAuth uses only subset of fields defined in STPSimple). Here are relevant fields:
+
+\begin{Verbatim}[frame=single]
+message STPSimple {
+  optional int32 ampType=1;
+  optional int32 ampVersion=2;g.
+  optional uint32 sequenceNumber=3;
+  optional uint64 messageSentMiliUTC=4;
+  optional uint32 randomNonce=5;
+  
+  optional string sender=6;
+  optional string destination=7; 
+  optional int32 destinationType=8;   // OPT. 
+  
+  optional bytes signature=9;
+  optional int32 signatureVersion=10;   // OPT.
+  
+  optional bytes payload=21;
+}
+\end{Verbatim} 
+
+\paragraph{Fields discussion.} 
+\begin{itemize}
+ \item \verb#payload# cointains plaintext application message (serialized to bytes)
+
+ \item \verb#signatureVersion# contains signature scheme used for the digital signature. This field can be omitted, default is RSA signature.
+ 
+ \item \verb#signature# is a RSA digital signature protects key message fields and the plaintext message. Signing plaintext 
+ is intended to bind plaintext message to the sender identity. Signature binds following fields together:
+\begin{itemize}
+ \item \verb#protocolType#
+ \item \verb#protocolVersion#
+ \item \verb#ampType#
+ \item \verb#ampVersion#
+ \item \verb#sequenceNumber#
+ \item \verb#messageSentMiliUTC# 
+ \item \verb#randomNonce#
+ \item \verb#sender#
+ \item \verb#destination#
+ \item \verb#destinationType#
+ \item \verb#payload#
+\end{itemize}
+
+Other fields have the same meaning as for STPSimple.
+\end{itemize}
+
+
 \subsection{Further variants of STPs}
 There may be different multiple STPs suitable for different purposes.
 \begin{itemize}
@@ -338,18 +395,136 @@ There may be different multiple STPs suitable for different purposes.
 \end{itemize}
 
 
-\subsection{AMPIMSimple, v1}
+\subsection{AMPSimple, v1.0}
 This section briefly describes application message protocol for instant messaging. This messaging protocol is very simple,
-it contains just one field with text message from the user. 
+it contains one field with text message from the user and another 32b int field nonce as a message identificator.
 
 \begin{Verbatim}[frame=single]
 message STPSimple {
   // Message sent by user. message=GZIP(plainMessage);
   optional bytes message=1;
+  optional int32 nonce=2;
 }
 \end{Verbatim} 
 
 Field message contains a GZIPed version of a plaintext message entered by user in UI. GZIP compression reduces 
 overall message size.
+
+\subsection{Versioning}
+
+\subsubsection{Capabilities}
+Capabilities are flags (version-like numbers) indicating what type of functionality remote client supports. Each client transfers list of capabilities to every other contact in his contact list. They are transferred using XMPP Presence.\\ \\
+Messaging capability has format $3.1.x$, where $x$ represents Messaging Protocol version, 3.1 is messaging prefix. Following versions are supported:
+
+\begin{itemize}
+\item \textbf{3.1.2} - Messaging Protocol 2.0;
+\item default\footnote{When no messaging capability is indicated} - Messaging Protocol 1.0;
+
+\end{itemize}
+
+
+
+
+
+\section{Message processing - Android}
+Here is a summary how Message processing on Android works/should work.
+
+\begin{itemize}
+\item \textbf{Message Queue} -  FIFO containing QueuedMessage(s) that have to be processed by MessageManager. Currently this queue is stored in SQLCipher and accessible by standard content resolver provided by Android.
+
+\item \textbf{QueuedMessage} - item stored in Message Queue. Format:
+\begin{Verbatim}[frame=single]
+public class QueuedMessage {
+    protected Integer id;
+    protected long time;
+    protected String from;
+    protected String to;
+    protected boolean isOutgoing;
+    protected boolean isProcessed = false;
+    protected Integer sendCounter;
+
+    protected Integer transportProtocolType;
+    protected Integer transportProtocolVersion;
+
+    protected Integer messageProtocolType;
+    protected Integer messageProtocolVersion;
+
+    protected String mimeType; // legacy
+
+    protected byte[] transportPayload;
+    protected byte[] envelopePayload;    
+    
+    protected Integer referencedId;
+}
+\end{Verbatim} 
+\textbf{Fields discussion}:
+\begin{itemize}
+\item \verb#from# is identity of sender. Currently we expect that it is in SIP format (email).
+\item \verb#to# is identity of receiver. 
+\item \verb#isProcessed# is flag saying that message was processed and is waiting for acknowledgment (after that, it is deleted). 
+\item \verb#sendCounter# is send counter for outgoing messages. We try to resend (if transfer failed) each outgoing message up to specific number of times. 
+\item \verb#transportProtocolType#, \verb#transportProtocolVersion# are identifiers of what (secure) transport protocol is or should be used (should - for outgoing messages). All proposed transport protocols are listed in \ref{subsec:message_protocol_design}. Here are those that are currently used:
+
+\begin{tabular}{lll}
+Transport Protocol name & Type \# & Supported Versions \# \\
+\hline
+\verb#S/MIME# & 1 & 1 \\
+\verb#STPSimple# & 2 & 1
+\end{tabular}
+\medskip
+
+\item \verb#messageProtocolType#, \verb#messageProtocolVersion# are identifiers of what AMP (application message protocol) is used. Here are types and versions that are currently supported:
+
+\begin{tabular}{lll}
+AMP name & Type \# & Supported Versions \# \\
+\hline
+\verb#Text# & 1 & 1 (plaintext), 2 (\verb#AmpSimple#) \\
+\verb#Notification# & 2 & 1 (\verb#GeneralMsgNotification#, see FileTransfer protocol)
+\end{tabular}
+\medskip
+
+\item \verb#mimeType# is a legacy field (stores MIME type that is sent via SIP messaging system)
+\item \verb#transportPayload# is byte payload for S/MIME transport protocol (in this case it's Base64 encoded String represented as bytes) or StpSimple transport layer.
+\item \verb#envelopePayload# is byte payload of message envelope, see \ref{subsec:message_protocol_design}.
+\item \verb#referencedId# is a reference to application item that was passed to MessageQueue for sending. For example, in case of text message, this is an id of item in SipMessage table. It is used for callbacks to application layer when informing about sending status.
+
+\end{itemize}
+
+\end{itemize}
+\subsection{Application flow (incoming messages)}
+This is the simplest flow case, because we do not have to solve message retransmission.
+
+Received message is retrieved in \verb#PjCallback.on_pager()# method. This method takes message data, parses it using ProtoBuf as \verb#MessageEnvelope# object and stores envelope payload together with transport protocol type and version into MessageQueue. 
+
+MessageQueue detects changes in associated DB table. In case there are some unprocessed incoming messages, those are passed to \verb#TransportProtocolDispatcher# together with user identity and remote certificate (that might be necessary when decrypting received transport packet). After this, QueuedMessage is deleted from the DB queue.
+
+\verb#TransportProtocolDispatcher# takes transport packet and passes it to associated parser according to transport type and version. After packet is parsed and data is retrieved, this is further passed to \verb#AmpDispatcher#.
+
+\verb#AmpDispatcher# processes message accordingly to \verb#AmpType# and \verb#AmpVersion#.
+
+
+\subsection{Application flow (outgoing messages)}
+
+If application want to send particular message over the wire, it needs to put it in the MessageQueue first. There are few static methods provided in \verb#AmpDispatcher# to do so:
+
+\begin{itemize}
+\item a
+\end{itemize}
+
+
+\subsubsection{Manual resend}
+Manual resend works almost the same as regular sending. Difference from automatic resend is that we do not want to reuse transport protocol envelope but generate a new one (e.g. to get new transport nonce). Also, we need to notify MessageManager about resend so it can correctly update MessageQueue. Options: 
+\begin{enumerate}
+\item \textbf{Update old QueuedMessage} - reset \verb#sendCounter#, delete \verb#envelopePayload#, \verb#finalMessage# and \linebreak \verb#finalMessageHash#. Mark message as unprocessed. This preserves message's position in the queue. \\
+\item \textbf{Delete old QueuedMessage + insert new} - delete old message according to \verb#referencedId# if any such message is in the MessageQueue (we can do this before every sending in AmpDispatcher). Message is reinserted in the queue.
+\end{enumerate}
+
+Currently the \textbf{2nd option} is preferred and used in the Android application.
+
+\subsubsection{Timers}
+Situation: message is flagged as 'processed', but no acknowledgment is received it is blocking other messages in the stack. 
+Reality: In case of sudden connection lost, underlying SipStack provides negative ack, so no timer is necessary.
+Situation: application crashes before receving any ack - so message is blocking.
+Solution
 
 \end{document}
